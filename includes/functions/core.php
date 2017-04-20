@@ -15,17 +15,39 @@ function setup() {
 		return __NAMESPACE__ . "\\$function";
 	};
 
+	// Theme setup
 	add_action( 'after_setup_theme',       $n( 'i18n' )                     );
 	add_action( 'after_setup_theme',       $n( 'theme_setup' )              );
+
+	// Styles and scripts
 	add_action( 'wp_enqueue_scripts',      $n( 'scripts' )                  );
 	add_action( 'wp_enqueue_scripts',      $n( 'styles' )                   );
 	add_action( 'admin_enqueue_scripts',   $n( 'admin_styles' )             );
+
+	// Header meta
 	add_action( 'wp_head',                 $n( 'header_meta' )              );
-	add_action( 'wp_dashboard_setup',      $n( 'remove_dashboard_widgets' ) );
+
+	// Admin
 	add_action( 'widgets_init',            $n( 'register_sidebar_init' )    );
+	add_action( 'wp_dashboard_setup',      $n( 'remove_dashboard_widgets' ) );
 	add_action( 'admin_menu',              $n( 'remove_admin_menus' )       );
 	add_filter( 'acf/settings/show_admin', $n( 'hide_acf_menu' )            );
+	add_action( 'customize_register',      $n( 'remove_css_customizer', 15 ) );
+
+	// Editor
+	add_filter( 'tiny_mce_before_init',    $n( 'custom_editor' )             );
+	add_filter( 'mce_buttons_2',           $n( 'add_mce_buttons' )           );
+	add_filter( 'tiny_mce_before_init',    $n( 'add_mce_styles' )            );
+
+	// Move Yoast SEO metabox below custom fields
 	add_filter( 'wpseo_metabox_prio',      $n( 'move_yoast_seo_to_bottom')  );
+
+	// Remove all Events Calendar styles/scripts
+	add_action( 'wp_enqueue_scripts',      $n( 'dequeue_tribe_assets', 100 ) );
+
+	// Remove all CF7 styles/scripts on all pages
+	add_filter( 'wpcf7_load_js',           '__return_false'                  );
+	add_filter( 'wpcf7_load_css',          '__return_false'                  );
 }
 
 /**
@@ -187,18 +209,6 @@ function header_meta() {
 }
 
 /**
- * Remove default dashboard widgets
- *
- * @since 0.1.0
- *
- * @return void
- */
-function remove_dashboard_widgets() {
-	remove_meta_box( 'dashboard_primary', 'dashboard', 'side' );   // WordPress News
-	// use 'dashboard-network' as the second parameter to remove widgets from a network dashboard.
-}
-
-/**
  * Registers a widget area
  *
  * @link https://developer.wordpress.org/reference/functions/register_sidebar/
@@ -220,6 +230,21 @@ function register_sidebar_init() {
 }
 
 /**
+ * Remove default dashboard widgets
+ *
+ * @since 0.1.0
+ *
+ * @return void
+ */
+function remove_dashboard_widgets() {
+	// Use 'dashboard-network' as the second parameter to remove widgets from a network dashboard.
+	remove_meta_box( 'dashboard_primary', 'dashboard', 'side' );           // WordPress News
+	remove_meta_box( 'dashboard_recent_comments', 'dashboard', 'normal' ); // Recent Comments
+	remove_meta_box( 'dashboard_quick_press', 'dashboard', 'normal' );     // Quick Press
+}
+}
+
+/**
  * Remove admin menus
  *
  * @since 0.1.0
@@ -229,6 +254,24 @@ function register_sidebar_init() {
 function remove_admin_menus(){
 	remove_menu_page( 'edit.php' );          // Posts
 	remove_menu_page( 'edit-comments.php' ); // Comments
+
+	// Display for admins only
+	if ( ! current_user_can( 'update_core' ) ) {
+		remove_menu_page( 'wpseo_dashboard' ); // Yoast SEO
+	}
+}
+
+/**
+ * ACF: Hides admin menu
+ *
+ * @link https://www.advancedcustomfields.com/resources/how-to-hide-acf-menu-from-clients/
+ *
+ * @since 0.1.0
+ *
+ * @return void
+ */
+function hide_acf_menu( $show ) {
+	return current_user_can( 'update_core' );
 }
 
 /**
@@ -250,31 +293,148 @@ if ( function_exists( 'acf_add_options_page' ) ) {
 		'position'   => 20,
 		'redirect'   => false
 	) );
-
-	acf_add_options_sub_page( array(
-		'page_title' 	=> 'Header Options',
-		'menu_title'	=> 'Header',
-		'parent_slug'	=> 'site-options',
-	) );
-
-	acf_add_options_sub_page( array(
-		'page_title' 	=> 'Footer Options',
-		'menu_title'	=> 'Footer',
-		'parent_slug'	=> 'site-options',
-	) );
 }
 
 /**
- * ACF: Hides admin menu
- *
- * @link https://www.advancedcustomfields.com/resources/how-to-hide-acf-menu-from-clients/
+ * Remove the additional CSS section, introduced in 4.7, from the Customizer.
  *
  * @since 0.1.0
  *
+ * @param $wp_customize WP_Customize_Manager
  * @return void
  */
-function hide_acf_menu( $show ) {
-	return current_user_can( 'update_core' );
+function remove_css_customizer( $wp_customize ) {
+	$wp_customize->remove_section( 'custom_css' );
+}
+
+/**
+ * Customize TinyMCE editor
+ *
+ * @since 0.1.0
+ *
+ * @param $in TinyMCE
+ * @return void
+ */
+function custom_editor( $in ) {
+	// Keep the Toggle Toolbar open
+	$in[ 'wordpress_adv_hidden' ] = FALSE;
+	return $in;
+}
+
+/**
+ * Visual Editor - Add buttons that are disabled by default
+ *
+ * @link http://codex.wordpress.org/TinyMCE_Custom_Buttons
+ *
+ * @since 0.1.0
+ *
+ * @param $buttons TinyMCE
+ * @return void
+ */
+function add_mce_buttons( $buttons ) {
+    $buttons[] = 'styleselect';
+    $buttons[] = 'sup';
+    $buttons[] = 'sub';
+    return $buttons;
+}
+
+/**
+ * Visual Editor - Add custom styles in 'styleselect' drop down list
+ *
+ * @link http://codex.wordpress.org/TinyMCE_Custom_Styles
+ *
+ * @since 0.1.0
+ *
+ * @param $init_array TinyMCE
+ * @return void
+ */
+function add_mce_styles( $init_array ) {
+	// Define the style_formats array
+	$style_formats = array(
+		// Each array child is a format with it's own settings
+		array(
+			'title' => 'Align Left',
+			'block' => 'div',
+			'classes' => 'alignleft',
+			'wrapper' => true,
+		),
+		array(
+			'title' => 'Align Right',
+			'block' => 'div',
+			'classes' => 'alignright',
+			'wrapper' => true,
+		),
+		array(
+			'title' => 'Center',
+			'block' => 'div',
+			'classes' => 'aligncenter',
+			'wrapper' => true,
+		),
+		array(
+			'title' => 'Call Out',
+			'block' => 'div',
+			'classes' => 'callout',
+			'wrapper' => true,
+		),
+		array(
+			'title' => 'Block Quote',
+			'block' => 'blockquote',
+			'classes' => 'blockquote',
+		),
+		array(
+			'title' => 'Paragraph Lead',
+			'block' => 'p',
+			'classes' => 'lead',
+		),
+		array(
+			'title' => 'Paragraph Small',
+			'block' => 'p',
+			'classes' => 'small',
+		),
+		array(
+			'title' => 'Button Blue Large',
+			'block' => 'a',
+			'classes' => 'btn btn-first btn-lg',
+		),
+		array(
+			'title' => 'Button Blue Medium',
+			'block' => 'a',
+			'classes' => 'btn btn-first btn-md',
+		),
+		array(
+			'title' => 'Button Blue Small',
+			'block' => 'a',
+			'classes' => 'btn btn-first btn-sm',
+		),
+		array(
+			'title' => 'Button Blue XSmall',
+			'block' => 'a',
+			'classes' => 'btn btn-first btn-xsm',
+		),
+		array(
+			'title' => 'Button Red Large',
+			'block' => 'a',
+			'classes' => 'btn btn-second btn-lg',
+		),
+		array(
+			'title' => 'Button Red Medium',
+			'block' => 'a',
+			'classes' => 'btn btn-second btn-md',
+		),
+		array(
+			'title' => 'Button Red Small',
+			'block' => 'a',
+			'classes' => 'btn btn-second btn-sm',
+		),
+		array(
+			'title' => 'Button Red XSmall',
+			'block' => 'a',
+			'classes' => 'btn btn-second btn-xsm',
+		),
+	);
+    // Insert the array, JSON ENCODED, into 'style_formats'
+	$init_array['style_formats'] = json_encode( $style_formats );
+	return $init_array;
 }
 
 /**
@@ -286,4 +446,22 @@ function hide_acf_menu( $show ) {
  */
 function move_yoast_seo_to_bottom() {
 	return 'low';
+}
+
+/**
+ * The Events Calendar: Dequeue assets
+ *
+ * @since 0.1.0
+ *
+ * @return void
+ */
+function dequeue_tribe_assets() {
+	wp_dequeue_style( 'tribe-events-full-calendar-style' );
+	wp_dequeue_style( 'tribe-events-calendar-style' );
+	wp_dequeue_style( 'tribe-events-calendar-full-mobile-style' );
+	wp_dequeue_style( 'tribe-events-calendar-mobile-style' );
+	wp_dequeue_style( 'tribe-events-full-pro-calendar-style' );
+	wp_dequeue_style( 'tribe-events-calendar-pro-style' );
+	wp_dequeue_style( 'tribe-events-calendar-full-pro-mobile-style' );
+	wp_dequeue_style( 'tribe-events-calendar-pro-mobile-style' );
 }
